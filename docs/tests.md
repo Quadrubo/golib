@@ -9,4 +9,5 @@ testing through it would be materially worse.
 
 Specs boot the real modules and their real dependencies rather than stand-ins.
 A module that cannot be booted cleanly, because it writes to stdout or touches
-process-wide state, carries an option that turns that behaviour off.
+process-wide state, carries an option that turns that behaviour off, the way
+`logging` does with `WithWriter` and `WithoutDefault`.
