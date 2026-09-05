@@ -49,7 +49,9 @@ the implementation once and confirm the spec fails.
 
 Keep `docs/` up to date with the code, in the same commit.
 
-`docs/packages/<package>.md` documents one package under a fixed structure:
+`docs/packages/` mirrors the import path, so `grpcinterceptor/recovery` is
+documented in `docs/packages/grpcinterceptor/recovery.md`. Each page documents
+one package under a fixed structure:
 
 - `## Usage` is the shape a consumer works with
 - `## Mechanics` is the mechanism, for anyone changing the package
