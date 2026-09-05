@@ -38,6 +38,11 @@
               pkgs-unstable.gotools
               ginkgo
 
+              # Codegen for the spec protos
+              protobuf
+              buf
+              protoc-gen-go
+
               # Commands
               just
 

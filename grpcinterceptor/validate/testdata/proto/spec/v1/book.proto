@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package spec.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/quadrubo/golib/grpcinterceptor/validate/testdata/spec/v1;specv1";
+
+// Book gives the specs a message with rules, since lib cannot import the protos
+// of a service.
+message Book {
+  string title = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+  }];
+
+  string isbn = 2 [(buf.validate.field).string.pattern = "^[0-9]{13}$"];
+}
+
+// Broken carries a rule that only fails when protovalidate compiles it.
+message Broken {
+  option (buf.validate.message).cel = {
+    id: "broken"
+    expression: "this.absent == 1"
+  };
+
+  string name = 1;
+}
