@@ -15,6 +15,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/samber/do/v2 v2.1.0
+	golang.org/x/sync v0.22.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260904194346-d0f1323225a4
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
@@ -44,7 +45,6 @@ require (
 	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
