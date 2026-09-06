@@ -156,7 +156,7 @@ func settable(fd protoreflect.FieldDescriptor) bool {
 		return false
 	}
 
-	return fd.Kind() != protoreflect.MessageKind || isTimestamp(fd)
+	return fd.Kind() != protoreflect.MessageKind || isTimestamp(fd) || isDuration(fd)
 }
 
 // enforceable reports whether a missing value of the field is observable,

@@ -8,11 +8,16 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func isTimestamp(fd protoreflect.FieldDescriptor) bool {
 	return fd.Kind() == protoreflect.MessageKind && fd.Message().FullName() == "google.protobuf.Timestamp"
+}
+
+func isDuration(fd protoreflect.FieldDescriptor) bool {
+	return fd.Kind() == protoreflect.MessageKind && fd.Message().FullName() == "google.protobuf.Duration"
 }
 
 func valueOf[R proto.Message](r R, fd protoreflect.FieldDescriptor) protoreflect.Value {
@@ -75,6 +80,10 @@ func differing(fd protoreflect.FieldDescriptor, current protoreflect.Value) (pro
 		return protoreflect.ValueOfMessage(timestamppb.New(time.Unix(8, 0)).ProtoReflect()), true
 	}
 
+	if isDuration(fd) {
+		return protoreflect.ValueOfMessage(durationpb.New(8 * time.Second).ProtoReflect()), true
+	}
+
 	return fd.Default(), true
 }
 
@@ -115,6 +124,10 @@ func sample(fd protoreflect.FieldDescriptor) (protoreflect.Value, bool) {
 			return protoreflect.ValueOfMessage(timestamppb.New(time.Unix(7, 0)).ProtoReflect()), true
 		}
 
+		if isDuration(fd) {
+			return protoreflect.ValueOfMessage(durationpb.New(7 * time.Second).ProtoReflect()), true
+		}
+
 		return protoreflect.Value{}, false
 	default:
 		return protoreflect.Value{}, false
@@ -135,6 +148,12 @@ func literal(fd protoreflect.FieldDescriptor, v protoreflect.Value) string {
 	case protoreflect.FloatKind:
 		return strconv.FormatFloat(v.Float(), 'g', -1, 32)
 	case protoreflect.MessageKind:
+		if isDuration(fd) {
+			span, _ := v.Message().Interface().(*durationpb.Duration)
+
+			return quote(span.AsDuration().String())
+		}
+
 		stamp, _ := v.Message().Interface().(*timestamppb.Timestamp)
 
 		return quote(stamp.AsTime().UTC().Format(time.RFC3339Nano))
@@ -161,6 +180,13 @@ func less(fd protoreflect.FieldDescriptor, a, b protoreflect.Value) (bool, bool)
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		return a.Float() < b.Float(), true
 	case protoreflect.MessageKind:
+		if isDuration(fd) {
+			first, _ := a.Message().Interface().(*durationpb.Duration)
+			second, _ := b.Message().Interface().(*durationpb.Duration)
+
+			return first.AsDuration() < second.AsDuration(), true
+		}
+
 		if !isTimestamp(fd) {
 			return false, false
 		}

@@ -42,7 +42,8 @@ writable, required, optional, immutable and output only.
 The specs walk those sets rather than naming any field, so a resource that
 gains a field gains the coverage of it in the same run. A field the specs
 cannot build a value for, being a list, a map or a message other than a
-timestamp, is left out of the walk.
+timestamp or a duration, is left out of the walk. A message of another type
+carries its own fields and rules, which a built value breaks.
 
 `Fixtures` runs first and asserts what the later specs rely on, that `Full`
 sets every creatable field, that `Minimal` sets the required ones alone, and
