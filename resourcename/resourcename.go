@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const wildcard = "*"
@@ -94,6 +96,21 @@ func (p Pattern) Format(ids ...string) string {
 	}
 
 	return strings.Join(segments, "/")
+}
+
+func FillUUIDv7(id *string) error {
+	if *id != "" {
+		return nil
+	}
+
+	generated, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("resourcename: failed to generate an id: %w", err)
+	}
+
+	*id = generated.String()
+
+	return nil
 }
 
 func (p Pattern) size() int {

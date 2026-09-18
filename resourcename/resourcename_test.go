@@ -214,3 +214,28 @@ var _ = Describe("Format of a singleton", func() {
 			To(PanicWith(`resourcename: pattern serverConfig cannot format ["alice"]`))
 	})
 })
+
+var _ = Describe("FillUUIDv7", func() {
+	It("sets a UUID v7 on an empty id", func() {
+		var id string
+
+		Expect(resourcename.FillUUIDv7(&id)).To(Succeed())
+		Expect(id).To(HaveLen(36))
+		Expect(id[14]).To(Equal(byte('7')))
+	})
+
+	It("keeps a given id", func() {
+		id := "alice"
+
+		Expect(resourcename.FillUUIDv7(&id)).To(Succeed())
+		Expect(id).To(Equal("alice"))
+	})
+
+	It("sets a different id each time", func() {
+		var first, second string
+
+		Expect(resourcename.FillUUIDv7(&first)).To(Succeed())
+		Expect(resourcename.FillUUIDv7(&second)).To(Succeed())
+		Expect(first).NotTo(Equal(second))
+	})
+})

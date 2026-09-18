@@ -20,6 +20,15 @@ var BookPattern = resourcename.MustCompile("shelves/*/books/*")
 wildcard for. `serverConfig` and `users/*/settings` are both singletons, and
 the first parses to no ids at all.
 
+`FillUUIDv7` gives a resource its id on create. It keeps the id a client chose
+and sets a UUID v7 on an empty one, which sorts by creation time.
+
+```go
+if err := resourcename.FillUUIDv7(&book.ID); err != nil {
+	return nil, err
+}
+```
+
 ## Mechanics
 
 An id segment matches `[a-z0-9-]{1,63}`. That is the format a service states in
