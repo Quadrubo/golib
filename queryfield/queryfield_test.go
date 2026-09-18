@@ -26,11 +26,16 @@ type row struct {
 	Closed   *time.Time
 	Featured *bool
 	Rating   *float64
+	Offset   time.Duration
+	Pause    *time.Duration
 }
 
 var created = time.Date(2026, time.August, 3, 12, 0, 0, 123456000, time.UTC)
 
-var sample = row{Name: "Alto", Created: created, Capacity: 12, Hidden: true, Weight: 0.1, Phase: "open"}
+var sample = row{
+	Name: "Alto", Created: created, Capacity: 12, Hidden: true, Weight: 0.1, Phase: "open",
+	Offset: 2 * time.Hour,
+}
 
 // roundTrip encodes the row and parses the value back, failing the spec where the
 // column holds NULL.
@@ -185,16 +190,74 @@ var _ = Describe("Enum", func() {
 	})
 })
 
+var _ = Describe("Duration", func() {
+	field := queryfield.Duration("offset_seconds", time.Second, func(r row) time.Duration { return r.Offset })
+
+	It("declares the column and the kind", func() {
+		Expect(field.Column).To(Equal("offset_seconds"))
+		Expect(field.Kind).To(Equal(queryfield.KindDuration))
+	})
+
+	It("encodes the cursor as the count of units and parses it back", func() {
+		Expect(*field.Cursor(sample)).To(Equal("7200"))
+		Expect(roundTrip(field, sample)).To(Equal(int64(7200)))
+	})
+
+	DescribeTable("parses a literal in the seconds form to the count of units",
+		func(raw string, want int64) {
+			Expect(field.ParseLiteral(raw)).To(Equal(want))
+		},
+		Entry("whole seconds", "7200s", int64(7200)),
+		Entry("negative seconds", "-7200s", int64(-7200)),
+		Entry("zero", "0s", int64(0)),
+	)
+
+	It("parses a fraction the unit holds", func() {
+		millis := queryfield.Duration("pause_millis", time.Millisecond, func(r row) time.Duration { return r.Offset })
+
+		Expect(millis.ParseLiteral("1.5s")).To(Equal(int64(1500)))
+	})
+
+	It("returns an error for a fraction finer than the unit", func() {
+		Expect(field.ParseLiteral("1.5s")).Error().To(MatchError("it is not a multiple of 1s"))
+	})
+
+	DescribeTable("returns an error for a literal outside the seconds form",
+		func(raw string) {
+			Expect(field.ParseLiteral(raw)).Error().To(
+				MatchError(`it is not a duration in seconds, such as "7200s"`))
+		},
+		Entry("a bare number", "7200"),
+		Entry("the Go spelling", "2h0m0s"),
+		Entry("a fraction without the suffix", "1.5"),
+		Entry("an exponent", "1e3s"),
+		Entry("the suffix alone", "s"),
+		Entry("ten fraction digits", "1.0000000005s"),
+	)
+
+	It("returns an error for a count of seconds a duration does not hold", func() {
+		Expect(field.ParseLiteral("9223372037s")).Error().To(MatchError("it is out of range"))
+	})
+
+	It("panics on a unit that is not positive", func() {
+		Expect(func() {
+			queryfield.Duration("offset_seconds", 0, func(r row) time.Duration { return r.Offset })
+		}).To(PanicWith("queryfield: the duration unit is not positive"))
+	})
+})
+
 var _ = Describe("A nullable field", func() {
 	colour := queryfield.Text("colour", func(r row) *string { return r.Colour })
 	closed := queryfield.Time("closed_time", func(r row) *time.Time { return r.Closed })
 	featured := queryfield.Bool("featured", func(r row) *bool { return r.Featured })
 	rating := queryfield.Float("rating", func(r row) *float64 { return r.Rating })
+	pause := queryfield.Duration("pause_seconds", time.Second, func(r row) *time.Duration { return r.Pause })
 
 	It("declares a column that holds NULL", func() {
 		Expect(colour.Nullable()).To(BeTrue())
 		Expect(featured.Nullable()).To(BeTrue())
 		Expect(rating.Nullable()).To(BeTrue())
+		Expect(pause.Nullable()).To(BeTrue())
 	})
 
 	It("declares the literal COALESCE puts in place of NULL", func() {
@@ -202,6 +265,7 @@ var _ = Describe("A nullable field", func() {
 		Expect(closed.Zero()).To(Equal("'-infinity'::timestamptz"))
 		Expect(featured.Zero()).To(Equal("false"))
 		Expect(rating.Zero()).To(Equal("'-Infinity'::float8"))
+		Expect(pause.Zero()).To(Equal("0"))
 	})
 
 	It("encodes no cursor value for a row holding NULL", func() {
@@ -209,16 +273,19 @@ var _ = Describe("A nullable field", func() {
 		Expect(closed.Cursor(row{})).To(BeNil())
 		Expect(featured.Cursor(row{})).To(BeNil())
 		Expect(rating.Cursor(row{})).To(BeNil())
+		Expect(pause.Cursor(row{})).To(BeNil())
 	})
 
 	It("parses back the value a row does hold", func() {
 		held := "green"
 		flag := true
 		stars := 4.5
+		span := 90 * time.Second
 
 		Expect(roundTrip(colour, row{Colour: &held})).To(Equal("green"))
 		Expect(roundTrip(closed, row{Closed: &created})).To(BeTemporally("==", created))
 		Expect(roundTrip(featured, row{Featured: &flag})).To(Equal(true))
 		Expect(roundTrip(rating, row{Rating: &stars})).To(Equal(4.5))
+		Expect(roundTrip(pause, row{Pause: &span})).To(Equal(int64(90)))
 	})
 })

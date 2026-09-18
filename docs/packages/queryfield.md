@@ -16,18 +16,21 @@ The accessor's return type declares nullability. `func(b *Book) string` names a
 NOT NULL column and `func(b *Book) *string` names one that holds NULL. There is
 one constructor per kind rather than one per kind and nullability.
 
-`Text`, `Time`, `Int`, `Float`, `Bool`, `Enum` and `ResourceName` are the
-seven. `Enum` maps the name a filter writes to the word the column holds.
-`ResourceName` takes a `resourcename.Pattern` and unpacks a name to the id it
-ends in.
+`Text`, `Time`, `Int`, `Float`, `Bool`, `Enum`, `ResourceName` and `Duration`
+are the eight. `Enum` maps the name a filter writes to the word the column
+holds. `ResourceName` takes a `resourcename.Pattern` and unpacks a name to the
+id it ends in. `Duration` takes the unit the column counts, such as
+`time.Second`, and binds a filter value as the count of units.
 
 ## Mechanics
 
 A field carries two decoders, because the same column is spelled differently by
 its two callers. `ParseCursor` reads a page token, which the server wrote, and
 `ParseLiteral` reads a filter value, which a client wrote. A time cursor is
-epoch microseconds where a time filter is RFC3339, and a `ResourceName` cursor
-is the bare id where its filter is the whole name.
+epoch microseconds where a time filter is RFC3339, a `Duration` cursor is the
+count of units where its filter is the seconds form of
+`google.protobuf.Duration`, such as `"7200s"`, and a `ResourceName` cursor is
+the bare id where its filter is the whole name.
 
 `Kind` is what a caller switches on for the one decision neither decoder
 settles, which is whether a wildcard may match the column.
@@ -51,6 +54,9 @@ bind argument.
 
 `Float` encodes a cursor as the shortest decimal that parses back to the same
 bits, so a page boundary never skips or repeats a row.
+
+`Duration` reads the seconds form AIP-160 states and no other unit, and it
+rejects a fraction finer than the column's unit rather than rounding it.
 
 ## Failure modes
 

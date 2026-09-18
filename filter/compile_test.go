@@ -17,6 +17,7 @@ type book struct {
 	DisplayName string
 	Capacity    int64
 	CreateTime  time.Time
+	Span        time.Duration
 }
 
 var bookPattern = resourcename.MustCompile("books/*")
@@ -27,6 +28,7 @@ var books = filter.MustCompile(filter.Spec[book]{
 		"display_name": queryfield.Text("display_name", func(r book) string { return r.DisplayName }),
 		"capacity":     queryfield.Int("capacity", func(r book) int64 { return r.Capacity }),
 		"create_time":  queryfield.Time("create_time", func(r book) time.Time { return r.CreateTime }),
+		"span":         queryfield.Duration("span_seconds", time.Second, func(r book) time.Duration { return r.Span }),
 	},
 })
 
@@ -56,6 +58,12 @@ var _ = Describe("Filtering", func() {
 		Entry("an RFC3339 timestamp",
 			`create_time >= "2026-01-01T00:00:00Z"`, "create_time >= ?",
 			[]any{time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)}),
+		Entry("a duration in the seconds form",
+			`span = "7200s"`, "span_seconds = ?", []any{int64(7200)}),
+		Entry("a duration written unquoted",
+			"span = 7200s", "span_seconds = ?", []any{int64(7200)}),
+		Entry("a signed duration",
+			"span > -3600s", "span_seconds > ?", []any{int64(-3600)}),
 		Entry("a resource name against the column holding its id",
 			`name = "books/abc"`, "id = ?", []any{"abc"}),
 		Entry("a resource name under an ordering comparator, which order_by name walks too",
@@ -130,6 +138,9 @@ var _ = Describe("Filtering", func() {
 		Entry("a timestamp written as anything else",
 			`create_time > "yesterday"`,
 			`"create_time" does not match "yesterday", it is not an RFC3339 timestamp`),
+		Entry("a duration in the Go spelling",
+			"span = 2h0m0s",
+			`"span" does not match "2h0m0s", it is not a duration in seconds, such as "7200s"`),
 		Entry("a * opening a value, which this spec does not take",
 			`display_name = "*dio"`,
 			`a * opening "display_name" reads every row, so this collection takes one closing it alone`),

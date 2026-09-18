@@ -61,7 +61,9 @@ argument of a restriction is read as the sign of the number after it.
 
 **A value carrying an operator has to be quoted.** TEXT ends at
 `( ) - . = : < > ! , ' "`. An RFC3339 timestamp carries both `-` and `:`, so
-every timestamp is written quoted.
+every timestamp is written quoted. A duration is the seconds form of
+`google.protobuf.Duration`, and a fraction carries `.`, so a duration is
+written quoted too, such as `"1.5s"`.
 
 **The escape sequences a string carries.** The EBNF defines none, so this
 package fixes the set to `\\`, `\'`, `\"`, `\n`, `\r` and `\t`. Any other

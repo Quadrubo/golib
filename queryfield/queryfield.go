@@ -2,7 +2,9 @@ package queryfield
 
 import (
 	"errors"
+	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/quadrubo/golib/resourcename"
@@ -18,16 +20,18 @@ const (
 	KindBool
 	KindFloat
 	KindEnum
+	KindDuration
 )
 
 // A value func returns either the column type or a pointer to it, and the
 // pointer form is what declares the column nullable.
 type (
-	textValue  interface{ string | *string }
-	timeValue  interface{ time.Time | *time.Time }
-	intValue   interface{ int64 | *int64 }
-	boolValue  interface{ bool | *bool }
-	floatValue interface{ float64 | *float64 }
+	textValue     interface{ string | *string }
+	timeValue     interface{ time.Time | *time.Time }
+	intValue      interface{ int64 | *int64 }
+	boolValue     interface{ bool | *bool }
+	floatValue    interface{ float64 | *float64 }
+	durationValue interface{ time.Duration | *time.Duration }
 )
 
 // Field is the column a query field name resolves to. Column is repo-controlled
@@ -94,6 +98,33 @@ func Float[T any, V floatValue](column string, value func(T) V) Field[T] {
 	field := declare[T, V, float64](
 		column, KindFloat, "'-Infinity'::float8", value, encodeFloat, parseFloat)
 	field.parseLiteral = parseFloat
+
+	return field
+}
+
+// Duration declares a column counting whole multiples of unit, such as
+// time.Second for a column of seconds. A filter writes the seconds form of
+// google.protobuf.Duration, such as "7200s" or "1.5s", and the field binds the
+// count of units. A value finer than the unit is rejected.
+func Duration[T any, V durationValue](column string, unit time.Duration, value func(T) V) Field[T] {
+	if unit <= 0 {
+		panic("queryfield: the duration unit is not positive")
+	}
+
+	field := declare[T, V, time.Duration](column, KindDuration, "0", value,
+		func(held time.Duration) string { return strconv.FormatInt(int64(held/unit), 10) }, parseInt)
+	field.parseLiteral = func(raw string) (any, error) {
+		span, err := parseDuration(raw)
+		if err != nil {
+			return nil, err
+		}
+
+		if span%unit != 0 {
+			return nil, errors.New("it is not a multiple of " + unit.String())
+		}
+
+		return int64(span / unit), nil
+	}
 
 	return field
 }
@@ -225,6 +256,58 @@ func parseInt(raw string) (any, error) {
 	}
 
 	return value, nil
+}
+
+func parseDuration(raw string) (time.Duration, error) {
+	malformed := errors.New(`it is not a duration in seconds, such as "7200s"`)
+
+	text, ok := strings.CutSuffix(raw, "s")
+	if !ok {
+		return 0, malformed
+	}
+
+	negative := strings.HasPrefix(text, "-")
+	text = strings.TrimPrefix(text, "-")
+
+	whole, fraction, dotted := strings.Cut(text, ".")
+	if !digits(whole) || dotted && (!digits(fraction) || len(fraction) > 9) {
+		return 0, malformed
+	}
+
+	seconds, err := strconv.ParseInt(whole, 10, 64)
+	if err != nil {
+		return 0, errors.New("it is out of range")
+	}
+
+	var nanos int64
+	if dotted {
+		nanos, _ = strconv.ParseInt(fraction+strings.Repeat("0", 9-len(fraction)), 10, 64)
+	}
+
+	if seconds > (math.MaxInt64-nanos)/int64(time.Second) {
+		return 0, errors.New("it is out of range")
+	}
+
+	span := time.Duration(seconds)*time.Second + time.Duration(nanos)
+	if negative {
+		span = -span
+	}
+
+	return span, nil
+}
+
+func digits(text string) bool {
+	if text == "" {
+		return false
+	}
+
+	for _, r := range text {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func parseFloat(raw string) (any, error) {

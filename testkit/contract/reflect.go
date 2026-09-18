@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -151,7 +152,7 @@ func literal(fd protoreflect.FieldDescriptor, v protoreflect.Value) string {
 		if isDuration(fd) {
 			span, _ := v.Message().Interface().(*durationpb.Duration)
 
-			return quote(span.AsDuration().String())
+			return quote(durationLiteral(span))
 		}
 
 		stamp, _ := v.Message().Interface().(*timestamppb.Timestamp)
@@ -160,6 +161,24 @@ func literal(fd protoreflect.FieldDescriptor, v protoreflect.Value) string {
 	default:
 		return fmt.Sprint(v.Interface())
 	}
+}
+
+// durationLiteral returns the seconds form of google.protobuf.Duration, such
+// as 7200s or -1.5s.
+func durationLiteral(span *durationpb.Duration) string {
+	seconds, nanos := span.GetSeconds(), int64(span.GetNanos())
+
+	sign := ""
+	if seconds < 0 || nanos < 0 {
+		sign, seconds, nanos = "-", -seconds, -nanos
+	}
+
+	text := sign + strconv.FormatInt(seconds, 10)
+	if nanos != 0 {
+		text += "." + strings.TrimRight(fmt.Sprintf("%09d", nanos), "0")
+	}
+
+	return text + "s"
 }
 
 // quote returns the text as a filter string literal.
@@ -201,7 +220,8 @@ func less(fd protoreflect.FieldDescriptor, a, b protoreflect.Value) (bool, bool)
 }
 
 // textual reports whether the field takes a wildcard, which a filter offers
-// text alone.
+// text alone. A resource reference is compared whole.
 func textual(fd protoreflect.FieldDescriptor) bool {
-	return fd.Kind() == protoreflect.StringKind
+	return fd.Kind() == protoreflect.StringKind &&
+		!proto.HasExtension(fd.Options(), annotations.E_ResourceReference)
 }
