@@ -6,7 +6,7 @@ what it is being used to build.
 ## Installation
 
 ```shell
-go get github.com/quadrubo/golib@v0.1.0
+go get github.com/quadrubo/golib
 ```
 
 ## Documentation
