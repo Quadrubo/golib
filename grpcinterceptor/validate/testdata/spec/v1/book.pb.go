@@ -10,6 +10,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -121,17 +122,139 @@ func (x *Broken) GetName() string {
 	return ""
 }
 
+// Shelf gives the contract specs a resource with an etag.
+type Shelf struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Theme         string                 `protobuf:"bytes,2,opt,name=theme,proto3" json:"theme,omitempty"`
+	Etag          string                 `protobuf:"bytes,3,opt,name=etag,proto3" json:"etag,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Shelf) Reset() {
+	*x = Shelf{}
+	mi := &file_spec_v1_book_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Shelf) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Shelf) ProtoMessage() {}
+
+func (x *Shelf) ProtoReflect() protoreflect.Message {
+	mi := &file_spec_v1_book_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Shelf.ProtoReflect.Descriptor instead.
+func (*Shelf) Descriptor() ([]byte, []int) {
+	return file_spec_v1_book_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Shelf) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Shelf) GetTheme() string {
+	if x != nil {
+		return x.Theme
+	}
+	return ""
+}
+
+func (x *Shelf) GetEtag() string {
+	if x != nil {
+		return x.Etag
+	}
+	return ""
+}
+
+// Volume gives the contract specs a resource with a delete time.
+type Volume struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DeleteTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=delete_time,json=deleteTime,proto3" json:"delete_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Volume) Reset() {
+	*x = Volume{}
+	mi := &file_spec_v1_book_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Volume) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Volume) ProtoMessage() {}
+
+func (x *Volume) ProtoReflect() protoreflect.Message {
+	mi := &file_spec_v1_book_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Volume.ProtoReflect.Descriptor instead.
+func (*Volume) Descriptor() ([]byte, []int) {
+	return file_spec_v1_book_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Volume) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Volume) GetDeleteTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeleteTime
+	}
+	return nil
+}
+
 var File_spec_v1_book_proto protoreflect.FileDescriptor
 
 const file_spec_v1_book_proto_rawDesc = "" +
 	"\n" +
-	"\x12spec/v1/book.proto\x12\aspec.v1\x1a\x1bbuf/validate/validate.proto\"O\n" +
+	"\x12spec/v1/book.proto\x12\aspec.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"O\n" +
 	"\x04Book\x12\x1f\n" +
 	"\x05title\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18?R\x05title\x12&\n" +
 	"\x04isbn\x18\x02 \x01(\tB\x12\xbaH\x0fr\r2\v^[0-9]{13}$R\x04isbn\"=\n" +
 	"\x06Broken\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name:\x1f\xbaH\x1c\x1a\x1a\n" +
-	"\x06broken\x1a\x10this.absent == 1BLZJgithub.com/quadrubo/golib/grpcinterceptor/validate/testdata/spec/v1;specv1b\x06proto3"
+	"\x06broken\x1a\x10this.absent == 1\"E\n" +
+	"\x05Shelf\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05theme\x18\x02 \x01(\tR\x05theme\x12\x12\n" +
+	"\x04etag\x18\x03 \x01(\tR\x04etag\"Y\n" +
+	"\x06Volume\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12;\n" +
+	"\vdelete_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"deleteTimeBLZJgithub.com/quadrubo/golib/grpcinterceptor/validate/testdata/spec/v1;specv1b\x06proto3"
 
 var (
 	file_spec_v1_book_proto_rawDescOnce sync.Once
@@ -145,17 +268,21 @@ func file_spec_v1_book_proto_rawDescGZIP() []byte {
 	return file_spec_v1_book_proto_rawDescData
 }
 
-var file_spec_v1_book_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_spec_v1_book_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_spec_v1_book_proto_goTypes = []any{
-	(*Book)(nil),   // 0: spec.v1.Book
-	(*Broken)(nil), // 1: spec.v1.Broken
+	(*Book)(nil),                  // 0: spec.v1.Book
+	(*Broken)(nil),                // 1: spec.v1.Broken
+	(*Shelf)(nil),                 // 2: spec.v1.Shelf
+	(*Volume)(nil),                // 3: spec.v1.Volume
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_spec_v1_book_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4, // 0: spec.v1.Volume.delete_time:type_name -> google.protobuf.Timestamp
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_spec_v1_book_proto_init() }
@@ -169,7 +296,7 @@ func file_spec_v1_book_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spec_v1_book_proto_rawDesc), len(file_spec_v1_book_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -8,7 +8,7 @@ import (
 )
 
 func describeDelete[R proto.Message](h *harness[R]) {
-	if h.Delete == nil || h.Create == nil {
+	if h.Delete == nil || !h.CanSeed() {
 		return
 	}
 
@@ -52,26 +52,37 @@ func describeDelete[R proto.Message](h *harness[R]) {
 			h.ExpectError(err, codes.NotFound, "")
 		})
 
-		ginkgo.It("aborts on an etag another write outdated", func(ctx ginkgo.SpecContext) {
-			skipUnless(h.Update != nil, "Update")
+		if h.etagPolicy() != EtagNone {
+			ginkgo.It("aborts on an etag another write outdated", func(ctx ginkgo.SpecContext) {
+				skipUnless(h.Update != nil, "Update")
 
-			base := h.Fixture(ctx, h.NewParent(ctx))
+				base := h.Fixture(ctx, h.NewParent(ctx))
 
-			_, err := h.Update(ctx, h.Patch(base), h.AnyMask())
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				_, err := h.Update(ctx, h.Patch(base), h.AnyMask())
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-			err = h.Delete(ctx, h.NameOf(base), h.EtagOf(base))
+				err = h.Delete(ctx, h.NameOf(base), h.EtagOf(base))
 
-			h.ExpectEtagMismatchError(err)
-		})
+				h.ExpectEtagMismatchError(err)
+			})
+		}
 
-		ginkgo.It("rejects a delete without an etag", func(ctx ginkgo.SpecContext) {
-			created := h.Fixture(ctx, h.NewParent(ctx))
+		switch h.etagPolicy() {
+		case EtagRequired:
+			ginkgo.It("rejects a delete without an etag", func(ctx ginkgo.SpecContext) {
+				created := h.Fixture(ctx, h.NewParent(ctx))
 
-			err := h.Delete(ctx, h.NameOf(created), "")
+				err := h.Delete(ctx, h.NameOf(created), "")
 
-			h.ExpectError(err, codes.InvalidArgument, "etag")
-		})
+				h.ExpectError(err, codes.InvalidArgument, "etag")
+			})
+		case EtagOptional:
+			ginkgo.It("deletes without an etag", func(ctx ginkgo.SpecContext) {
+				created := h.Fixture(ctx, h.NewParent(ctx))
+
+				gomega.Expect(h.Delete(ctx, h.NameOf(created), "")).To(gomega.Succeed())
+			})
+		}
 
 		if h.Parent != nil && h.Parent.Delete != nil {
 			ginkgo.It("takes the resource along with its parent", func(ctx ginkgo.SpecContext) {

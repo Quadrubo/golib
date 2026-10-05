@@ -10,7 +10,7 @@ import (
 )
 
 func describeSoftDelete[R proto.Message](h *harness[R]) {
-	if h.SoftDelete == nil || h.Delete == nil || h.Create == nil || h.Get == nil {
+	if h.SoftDelete == nil || h.Delete == nil || !h.CanSeed() || h.Get == nil {
 		return
 	}
 
@@ -30,7 +30,9 @@ func describeSoftDelete[R proto.Message](h *harness[R]) {
 			found := h.Fetch(ctx, h.NameOf(created))
 
 			gomega.Expect(has(found, h.DeleteTimeField)).To(gomega.BeTrue())
-			gomega.Expect(h.EtagOf(found)).ToNot(gomega.Equal(h.EtagOf(created)))
+			if h.etagPolicy() != EtagNone {
+				gomega.Expect(h.EtagOf(found)).ToNot(gomega.Equal(h.EtagOf(created)))
+			}
 		})
 
 		ginkgo.It("leaves the resource out of the list unless show_deleted asks for it", func(ctx ginkgo.SpecContext) {

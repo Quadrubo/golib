@@ -18,6 +18,8 @@ type Resource[R proto.Message] struct {
 	// Parent stays nil for a top-level collection.
 	Parent *Parent
 
+	Etag EtagPolicy
+
 	Fixtures   Fixtures[R]
 	Methods    Methods[R]
 	Collection Collection
@@ -27,6 +29,24 @@ type Resource[R proto.Message] struct {
 	Batch      *Batch[R]
 	Views      *Views[R]
 }
+
+// EtagPolicy states whether Update and Delete of the resource take an etag,
+// which AIP-154 leaves to the service.
+type EtagPolicy int
+
+const (
+	// EtagRequired, the zero value, rejects an Update or a Delete without an
+	// etag and refuses an outdated one. A resource without Update and Delete
+	// whose message declares no etag field runs under EtagNone.
+	EtagRequired EtagPolicy = iota
+
+	// EtagOptional accepts an Update or a Delete without an etag and refuses
+	// an outdated one.
+	EtagOptional
+
+	// EtagNone is a message without an etag field.
+	EtagNone
+)
 
 // IDs describes the ids of a collection that departs from the lowercase
 // client-supplied id AIP-133 gives a create.

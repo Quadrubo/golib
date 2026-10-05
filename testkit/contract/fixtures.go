@@ -13,11 +13,16 @@ func describeFixtures[R proto.Message](h *harness[R]) {
 			gomega.Expect(h.NameField).ToNot(gomega.BeNil(), "the message declares no name field")
 		})
 
-		ginkgo.It("declares an etag on a resource that takes writes", func() {
-			skipUnless(h.Update != nil || h.Delete != nil, "Update or Delete")
-
-			gomega.Expect(h.EtagField).ToNot(gomega.BeNil(), "the message declares no etag field")
-		})
+		switch h.etagPolicy() {
+		case EtagRequired, EtagOptional:
+			ginkgo.It("declares an etag field on a resource that takes an etag", func() {
+				gomega.Expect(h.EtagField).ToNot(gomega.BeNil(), "the message declares no etag field")
+			})
+		case EtagNone:
+			ginkgo.It("declares no etag field under EtagNone", func() {
+				gomega.Expect(h.EtagField).To(gomega.BeNil(), "the message declares an etag field")
+			})
+		}
 
 		ginkgo.It("sets every field a create takes in Full", func() {
 			skipUnless(h.Full != nil, "Full")

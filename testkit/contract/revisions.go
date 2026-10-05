@@ -138,7 +138,9 @@ func describeRevisions[R proto.Message](h *harness[R]) {
 
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			gomega.Expect(restored).To(gomega.BeComparableTo(h.Minimal(), h.Comparing(h.Writable...)...))
-			gomega.Expect(h.EtagOf(restored)).ToNot(gomega.Equal(h.EtagOf(updated)))
+			if h.etagPolicy() != EtagNone {
+				gomega.Expect(h.EtagOf(restored)).ToNot(gomega.Equal(h.EtagOf(updated)))
+			}
 
 			page, err := r.List(ctx, h.NameOf(base), ListRequest{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())

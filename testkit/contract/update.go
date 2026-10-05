@@ -10,14 +10,14 @@ import (
 )
 
 func describeUpdate[R proto.Message](h *harness[R]) {
-	if h.Update == nil || h.Create == nil {
+	if h.Update == nil || !h.CanSeed() {
 		return
 	}
 
 	ginkgo.Describe("Update", func() {
 		for _, fd := range h.Writable {
 			ginkgo.It("writes the "+string(fd.Name())+" the mask selects and nothing else", func(ctx ginkgo.SpecContext) {
-				skipUnless(h.Full != nil && h.Minimal != nil, "Full and Minimal")
+				skipUnless(h.Create != nil && h.Full != nil && h.Minimal != nil, "Create, Full and Minimal")
 
 				base := h.Make(ctx, h.NewParent(ctx), h.Minimal())
 				full := h.Full()
@@ -29,7 +29,9 @@ func describeUpdate[R proto.Message](h *harness[R]) {
 				gomega.Expect(updated).To(gomega.BeComparableTo(full, h.Comparing(fd)...))
 				gomega.Expect(updated).To(gomega.BeComparableTo(base, h.Comparing(without(h.Writable, fd)...)...))
 				gomega.Expect(h.NameOf(updated)).To(gomega.Equal(h.NameOf(base)))
-				gomega.Expect(h.EtagOf(updated)).ToNot(gomega.Equal(h.EtagOf(base)))
+				if h.etagPolicy() != EtagNone {
+					gomega.Expect(h.EtagOf(updated)).ToNot(gomega.Equal(h.EtagOf(base)))
+				}
 
 				if h.CreateTimeField != nil {
 					gomega.Expect(timeOf(updated, h.CreateTimeField)).
@@ -49,7 +51,7 @@ func describeUpdate[R proto.Message](h *harness[R]) {
 
 		for _, fd := range h.Optional {
 			ginkgo.It("clears the "+string(fd.Name())+" the mask selects", func(ctx ginkgo.SpecContext) {
-				skipUnless(h.Full != nil, "Full")
+				skipUnless(h.Create != nil && h.Full != nil, "Create and Full")
 
 				base := h.Make(ctx, h.NewParent(ctx), h.Full())
 
@@ -63,7 +65,7 @@ func describeUpdate[R proto.Message](h *harness[R]) {
 		}
 
 		ginkgo.It("writes every writable field without a mask", func(ctx ginkgo.SpecContext) {
-			skipUnless(h.Full != nil && h.Minimal != nil, "Full and Minimal")
+			skipUnless(h.Create != nil && h.Full != nil && h.Minimal != nil, "Create, Full and Minimal")
 
 			base := h.Make(ctx, h.NewParent(ctx), h.Minimal())
 			full := h.Full()
@@ -140,23 +142,36 @@ func describeUpdate[R proto.Message](h *harness[R]) {
 			h.ExpectError(err, codes.NotFound, "")
 		})
 
-		ginkgo.It("aborts on an etag another write outdated", func(ctx ginkgo.SpecContext) {
-			base := h.Fixture(ctx, h.NewParent(ctx))
+		if h.etagPolicy() != EtagNone {
+			ginkgo.It("aborts on an etag another write outdated", func(ctx ginkgo.SpecContext) {
+				base := h.Fixture(ctx, h.NewParent(ctx))
 
-			_, err := h.Update(ctx, h.Patch(base), h.AnyMask())
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				_, err := h.Update(ctx, h.Patch(base), h.AnyMask())
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-			_, err = h.Update(ctx, h.Patch(base), h.AnyMask())
+				_, err = h.Update(ctx, h.Patch(base), h.AnyMask())
 
-			h.ExpectEtagMismatchError(err)
-		})
+				h.ExpectEtagMismatchError(err)
+			})
+		}
 
-		ginkgo.It("rejects an update without an etag", func(ctx ginkgo.SpecContext) {
-			base := h.Fixture(ctx, h.NewParent(ctx))
+		switch h.etagPolicy() {
+		case EtagRequired:
+			ginkgo.It("rejects an update without an etag", func(ctx ginkgo.SpecContext) {
+				base := h.Fixture(ctx, h.NewParent(ctx))
 
-			_, err := h.Update(ctx, h.Addressed(h.Blank(), h.NameOf(base), ""), h.AnyMask())
+				_, err := h.Update(ctx, h.Addressed(h.Blank(), h.NameOf(base), ""), h.AnyMask())
 
-			h.ExpectError(err, codes.InvalidArgument, "")
-		})
+				h.ExpectError(err, codes.InvalidArgument, "")
+			})
+		case EtagOptional:
+			ginkgo.It("updates without an etag", func(ctx ginkgo.SpecContext) {
+				base := h.Fixture(ctx, h.NewParent(ctx))
+
+				_, err := h.Update(ctx, h.Addressed(h.Blank(), h.NameOf(base), ""), h.AnyMask())
+
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+		}
 	})
 }

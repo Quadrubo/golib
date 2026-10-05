@@ -28,7 +28,10 @@ func describeBatch[R proto.Message](h *harness[R]) {
 			gomega.Expect(created[1]).To(gomega.BeComparableTo(h.Minimal(), h.Comparing(h.Writable...)...))
 
 			for _, item := range created {
-				gomega.Expect(h.EtagOf(item)).ToNot(gomega.BeEmpty())
+				if h.etagPolicy() != EtagNone {
+					gomega.Expect(h.EtagOf(item)).ToNot(gomega.BeEmpty())
+				}
+
 				h.ExpectFreshTimestamps(item)
 			}
 		})

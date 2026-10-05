@@ -31,6 +31,18 @@ is how a read-only resource declares `Get` and `List` alone. `Parent` stays nil
 for a top-level collection. `SoftDelete`, `Revisions`, `Batch` and `Views` stay
 nil for a resource without them.
 
+`Etag` states the etag policy of Update and Delete. AIP-154 leaves it to the
+service whether a write must carry an etag, and requires that a write with an
+etag that does not match fails. AIP-135 gives Delete an etag on a resource
+that carries one. `EtagRequired`, the zero value, expects a write without an
+etag to fail with `INVALID_ARGUMENT`. `EtagOptional` expects it to succeed.
+Under both, a write with an outdated etag fails with `ABORTED` and
+`ETAG_MISMATCH`, and the message must declare an `etag` field. `EtagNone`
+declares a message without an `etag` field and runs no etag specs. When `Etag`
+stays zero, a read-only resource whose message declares no `etag` field runs
+under `EtagNone`, and a resource with Update or Delete fails the fixture spec
+without the field.
+
 ## Mechanics
 
 `Describe` builds a harness from the resource and from the message descriptor
@@ -59,6 +71,12 @@ The package is flat. Splitting the harness away from the specs keeps twenty
 files in two named groups, but it forces the two to talk through exported
 names, and around forty identifiers would then carry an exported name for no
 reason beyond the split.
+
+The etag policy is a setting, since AIP-154 lets a service with Update and
+Delete choose any of the three. Only a read-only resource without an `etag`
+field gets its policy inferred. A resource without Create runs the Update,
+etag, Delete and soft delete specs on the resources `Seed` returns, and skips
+the Update specs that build a resource from `Full` or `Minimal`.
 
 ## Failure modes
 

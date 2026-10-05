@@ -14,7 +14,7 @@ import (
 const racers = 4
 
 func describeEtag[R proto.Message](h *harness[R]) {
-	if h.Create == nil || h.EtagField == nil {
+	if !h.CanSeed() || h.etagPolicy() == EtagNone {
 		return
 	}
 

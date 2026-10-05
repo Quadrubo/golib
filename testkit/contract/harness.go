@@ -23,6 +23,14 @@ func newHarness[R proto.Message](r Resource[R]) *harness[R] {
 	}
 }
 
+func (h *harness[R]) etagPolicy() EtagPolicy {
+	if h.Etag == EtagRequired && h.EtagField == nil && h.Update == nil && h.Delete == nil {
+		return EtagNone
+	}
+
+	return h.Etag
+}
+
 func skipUnless(declared bool, declaration string) {
 	ginkgo.GinkgoHelper()
 

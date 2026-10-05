@@ -3,6 +3,7 @@ syntax = "proto3";
 package spec.v1;
 
 import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/quadrubo/golib/grpcinterceptor/validate/testdata/spec/v1;specv1";
 
@@ -25,4 +26,17 @@ message Broken {
   };
 
   string name = 1;
+}
+
+// Shelf gives the contract specs a resource with an etag.
+message Shelf {
+  string name = 1;
+  string theme = 2;
+  string etag = 3;
+}
+
+// Volume gives the contract specs a resource with a delete time.
+message Volume {
+  string name = 1;
+  google.protobuf.Timestamp delete_time = 2;
 }
