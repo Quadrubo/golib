@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/do/v2"
+	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	reflectionpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 
 	"github.com/quadrubo/golib/app"
@@ -322,6 +325,38 @@ var _ = Describe("Rebooted", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(do.Invoke[*fakeResource](rebooted.Injector())).ToNot(BeNil())
+	})
+})
+
+var _ = Describe("DialWithToken", func() {
+	It("sends the token as a bearer credential on every call", func(ctx SpecContext) {
+		var seen atomic.Value
+		record := func(do.Injector) (grpc.UnaryServerInterceptor, error) {
+			return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+				md, _ := metadata.FromIncomingContext(ctx)
+				seen.Store(md.Get("authorization"))
+
+				return next(ctx, req)
+			}, nil
+		}
+
+		suite, err := testkit.Boot(ctx, testkit.Options{Modules: func(conf app.Module) []app.Module {
+			return []app.Module{
+				conf,
+				logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+				grpcserver.Module(grpcserver.WithUnaryInterceptors(record)),
+			}
+		}})
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(func() { Expect(suite.Stop()).To(Succeed()) })
+
+		conn, err := suite.DialWithToken("t0ken")
+		Expect(err).ToNot(HaveOccurred())
+		DeferCleanup(conn.Close)
+
+		_, err = healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(seen.Load()).To(Equal([]string{"Bearer t0ken"}))
 	})
 })
 

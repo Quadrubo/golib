@@ -8,6 +8,8 @@ than something golib uses internally.
 
 `testkit.Boot` starts the dependencies, runs the service, and waits for its
 health service to answer. A suite calls it once and stops it on cleanup.
+`Boot` calls the health service without a credential, so a service that
+requires one must list health as anonymous.
 
 ```go
 suite, err := testkit.Boot(ctx, testkit.Options{
@@ -23,7 +25,9 @@ suite, err := testkit.Boot(ctx, testkit.Options{
 suite runs the real wiring. `Settings` has the shape of the config file and
 overrides whatever `Boot` and the dependencies set.
 
-`Suite.Conn` is a connection to the running service, `Suite.Injector` holds
+`Suite.Conn` is a connection to the running service without credentials.
+`Suite.DialWithToken` opens one that sends a token as
+`authorization: Bearer <token>`, which the caller closes. `Suite.Injector` holds
 what the dependencies provided, and `Suite.Rebooted` runs a second service on
 the same dependencies under overridden settings.
 

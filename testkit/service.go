@@ -147,6 +147,28 @@ func (s *Suite) Addr() string { return s.addr }
 
 func (s *Suite) Conn() *grpc.ClientConn { return s.conn }
 
+// DialWithToken opens a connection that sends the token as `authorization:
+// Bearer <token>` on every call. The caller closes it.
+func (s *Suite) DialWithToken(token string) (*grpc.ClientConn, error) {
+	conn, err := grpc.NewClient(s.addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithPerRPCCredentials(bearer(token)))
+	if err != nil {
+		return nil, fmt.Errorf("testkit: failed to dial %s: %w", s.addr, err)
+	}
+
+	return conn, nil
+}
+
+type bearer string
+
+func (b bearer) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{"authorization": "Bearer " + string(b)}, nil
+}
+
+// RequireTransportSecurity lets the suite send the token without TLS.
+func (bearer) RequireTransportSecurity() bool { return false }
+
 // Injector holds what the dependencies provided for arranging state. The
 // service's own injector stays out of reach.
 func (s *Suite) Injector() do.Injector { return s.injector }
