@@ -73,12 +73,22 @@ func (m *module) Name() string { return "grpcserver" }
 func (m *module) Provide(_ context.Context, i do.Injector) error {
 	var err error
 
+	maxReceiveBytes := m.opts.maxReceiveBytes
+	if maxReceiveBytes == 0 {
+		maxReceiveBytes = 4 * 1024 * 1024
+	}
+
+	addr := m.opts.addr
+	if addr == "" {
+		addr = ":50051"
+	}
+
 	m.cfg, err = config.Load(i, m.Name(), configKey, Config{
-		Addr:            ":50051",
+		Addr:            addr,
 		GracePeriod:     5 * time.Second,
 		Reflection:      true,
 		Health:          true,
-		MaxReceiveBytes: 4 * 1024 * 1024,
+		MaxReceiveBytes: maxReceiveBytes,
 	})
 	if err != nil {
 		return err
@@ -110,13 +120,19 @@ func (m *module) Provide(_ context.Context, i do.Injector) error {
 	// in one process leaves the first one's logger installed.
 	installGRPCLog.Do(func() { grpclog.SetLoggerV2(GRPCLogger(log)) })
 
-	unary, err := m.chain(i)
+	unary, err := chain(i, m.opts.unary)
+	if err != nil {
+		return err
+	}
+
+	stream, err := chain(i, m.opts.stream)
 	if err != nil {
 		return err
 	}
 
 	m.server = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(unary...),
+		grpc.ChainStreamInterceptor(stream...),
 		grpc.MaxRecvMsgSize(int(m.cfg.MaxReceiveBytes)),
 	)
 	do.ProvideValue(i, m.server)
@@ -142,18 +158,18 @@ func (m *module) Stop(context.Context) error {
 	return nil
 }
 
-func (m *module) chain(i do.Injector) ([]grpc.UnaryServerInterceptor, error) {
-	chain := make([]grpc.UnaryServerInterceptor, 0, len(m.opts.unary))
-	for _, build := range m.opts.unary {
+func chain[B ~func(do.Injector) (T, error), T any](i do.Injector, builders []B) ([]T, error) {
+	interceptors := make([]T, 0, len(builders))
+	for _, build := range builders {
 		interceptor, err := build(i)
 		if err != nil {
 			return nil, fmt.Errorf("grpcserver: failed to build an interceptor: %w", err)
 		}
 
-		chain = append(chain, interceptor)
+		interceptors = append(interceptors, interceptor)
 	}
 
-	return chain, nil
+	return interceptors, nil
 }
 
 func (m *module) Run(ctx context.Context) error {

@@ -128,3 +128,40 @@ var _ = Describe("Unary", func() {
 		Expect(err).To(MatchError(ContainSubstring("recovery: failed to invoke the domain")))
 	})
 })
+
+type serverStream struct {
+	grpc.ServerStream
+}
+
+func (serverStream) Context() context.Context { return context.Background() }
+
+var _ = Describe("Stream", func() {
+	var it grpc.StreamServerInterceptor
+
+	BeforeEach(func() {
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{"modules.grpcerr.domain": string(domain)}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcerr.Module(),
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		it, err = recovery.Stream(a.Injector())
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	call := func(handler grpc.StreamHandler) error {
+		return it(nil, serverStream{},
+			&grpc.StreamServerInfo{FullMethod: "/spec.v1.Books/WatchBooks"}, handler)
+	}
+
+	It("turns a panic into an Internal error under its own domain", func() {
+		err := call(func(any, grpc.ServerStream) error { panic("nil map write") })
+
+		s, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(s.Code()).To(Equal(codes.Internal))
+		Expect(s.Message()).To(Equal("internal error"))
+		Expect(s.Details()).To(ContainElement(HaveField("Domain", string(domain))))
+	})
+})

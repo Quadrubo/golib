@@ -5,9 +5,10 @@ a dead process.
 
 ## Usage
 
-`recovery.Unary` builds the interceptor from the injector, so it resolves the
-logger and the error domain the same way a module does. It leads the chain, so
-a panic in any interceptor behind it still becomes a failed call.
+`recovery.Unary` and `recovery.Stream` build the interceptors from the
+injector, so they resolve the logger and the error domain the same way a module
+does. Each leads its chain, so a panic in any interceptor behind it still
+becomes a failed call.
 
 ## Mechanics
 

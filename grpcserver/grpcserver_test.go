@@ -3,10 +3,12 @@ package grpcserver_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -337,6 +339,123 @@ var _ = Describe("Server", func() {
 		Eventually(func() error { return serving(addr) }).Should(Succeed())
 
 		_, err := healthpb.NewHealthClient(dial(addr)).Check(context.Background(),
+			&healthpb.HealthCheckRequest{Service: strings.Repeat("x", 5*1024*1024)})
+
+		Expect(status.Code(err)).To(Equal(codes.ResourceExhausted))
+	})
+
+	It("chains the stream interceptors outermost first and keeps unary calls out of them", func() {
+		var mu sync.Mutex
+		var seen []string
+
+		record := func(name string) grpcserver.StreamInterceptor {
+			return func(do.Injector) (grpc.StreamServerInterceptor, error) {
+				return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, next grpc.StreamHandler) error {
+					mu.Lock()
+					seen = append(seen, name+" "+info.FullMethod)
+					mu.Unlock()
+
+					return next(srv, ss)
+				}, nil
+			}
+		}
+
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{"modules.grpcserver.addr": anyPort}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithStreamInterceptors(record("outer"), record("inner"))),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		addr := addrOf(a)
+
+		_, cancel := runInBackground(a)
+		DeferCleanup(cancel)
+
+		Eventually(func() error { return serving(addr) }).Should(Succeed())
+		Expect(listsServices(addr)).To(Succeed())
+
+		mu.Lock()
+		defer mu.Unlock()
+		Expect(seen).To(Equal([]string{
+			"outer /grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+			"inner /grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+		}))
+	})
+
+	It("fails the boot on a stream interceptor that fails to build", func() {
+		_, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{"modules.grpcserver.addr": anyPort}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithStreamInterceptors(
+				func(do.Injector) (grpc.StreamServerInterceptor, error) { return nil, errors.New("no key") },
+			)),
+		})
+
+		Expect(err).To(MatchError(ContainSubstring("grpcserver: failed to build an interceptor: no key")))
+	})
+
+	It("listens on the addr that WithAddr sets as the default", func() {
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithAddr(anyPort)),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		_, cancel := runInBackground(a)
+		DeferCleanup(cancel)
+
+		Expect(addrOf(a)).To(HavePrefix("127.0.0.1:"))
+	})
+
+	It("takes a configured addr over the one of WithAddr", func() {
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{"modules.grpcserver.addr": anyPort}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithAddr("192.0.2.1:9001")),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		_, cancel := runInBackground(a)
+		DeferCleanup(cancel)
+
+		Expect(addrOf(a)).To(HavePrefix("127.0.0.1:"))
+	})
+
+	It("takes a message under the max_receive_bytes that WithMaxReceiveBytes sets as the default", func() {
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{"modules.grpcserver.addr": anyPort}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithMaxReceiveBytes(16 * 1024 * 1024)),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		addr := addrOf(a)
+
+		_, cancel := runInBackground(a)
+		DeferCleanup(cancel)
+		Eventually(func() error { return serving(addr) }).Should(Succeed())
+
+		_, err = healthpb.NewHealthClient(dial(addr)).Check(context.Background(),
+			&healthpb.HealthCheckRequest{Service: strings.Repeat("x", 5*1024*1024)})
+
+		Expect(status.Code(err)).To(Equal(codes.NotFound))
+	})
+
+	It("takes a configured max_receive_bytes over the one of WithMaxReceiveBytes", func() {
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{
+				"modules.grpcserver.addr":              anyPort,
+				"modules.grpcserver.max_receive_bytes": "4MiB",
+			}),
+			logging.Module(logging.WithWriter(io.Discard), logging.WithoutDefault()),
+			grpcserver.Module(grpcserver.WithMaxReceiveBytes(16 * 1024 * 1024)),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		addr := addrOf(a)
+
+		_, cancel := runInBackground(a)
+		DeferCleanup(cancel)
+		Eventually(func() error { return serving(addr) }).Should(Succeed())
+
+		_, err = healthpb.NewHealthClient(dial(addr)).Check(context.Background(),
 			&healthpb.HealthCheckRequest{Service: strings.Repeat("x", 5*1024*1024)})
 
 		Expect(status.Code(err)).To(Equal(codes.ResourceExhausted))

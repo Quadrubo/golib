@@ -7,14 +7,21 @@ registers on, runs it, and drains it inside the app's shutdown budget.
 
 `grpcserver.Module` reads `modules.grpcserver`, which takes `addr`,
 `grace_period`, `reflection`, `health` and `max_receive_bytes`. The interceptor
-chain is given at construction, outermost first.
+chains are given at construction, outermost first. The unary chain runs on
+unary calls and the stream chain on streaming calls, so a check that guards
+every call sits in both. `validate` has only a unary interceptor, so a
+streaming method checks its messages itself. `WithMaxReceiveBytes` replaces
+the default of `max_receive_bytes`, 4 MiB, for a service whose calls carry
+larger messages, and the setting still overrides it. `WithAddr` replaces the
+default of `addr`, `:50051`, in the same way.
 
 ```go
-grpcserver.Module(grpcserver.WithUnaryInterceptors(
-    recovery.Unary,
-    errmap.Unary,
-    validate.Unary,
-))
+grpcserver.Module(
+    grpcserver.WithUnaryInterceptors(recovery.Unary, errmap.Unary, validate.Unary),
+    grpcserver.WithStreamInterceptors(recovery.Stream, errmap.Stream),
+    grpcserver.WithMaxReceiveBytes(128 * 1024 * 1024),
+    grpcserver.WithAddr(":9001"),
+)
 ```
 
 A service resolves the `*grpc.Server` from the injector and registers on it.
@@ -27,7 +34,8 @@ did so reads back what it got.
 
 ## Mechanics
 
-`Provide` builds the server, chains the interceptors, registers the standard
+`Provide` builds the server, builds both interceptor chains from the
+injector, registers the standard
 health service when `health` is set, and binds the listener. `Run` optionally
 registers reflection and serves on that listener until its context is
 cancelled.

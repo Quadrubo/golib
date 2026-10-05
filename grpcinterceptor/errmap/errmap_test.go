@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -59,8 +60,8 @@ var _ = Describe("Unary", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	call := func(returns error) (any, error) {
-		return it(context.Background(), "req",
+	callIn := func(ctx context.Context, returns error) (any, error) {
+		return it(ctx, "req",
 			&grpc.UnaryServerInfo{FullMethod: "/spec.v1.Books/GetBook"},
 			func(context.Context, any) (any, error) {
 				if returns != nil {
@@ -69,6 +70,22 @@ var _ = Describe("Unary", func() {
 
 				return "resp", nil
 			})
+	}
+
+	call := func(returns error) (any, error) { return callIn(context.Background(), returns) }
+
+	cancelled := func() context.Context {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		return ctx
+	}
+
+	expired := func() context.Context {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now())
+		DeferCleanup(cancel)
+
+		return ctx
 	}
 
 	statusOf := func(err error) *status.Status {
@@ -141,6 +158,31 @@ var _ = Describe("Unary", func() {
 		Expect(statusOf(err).Message()).ToNot(ContainSubstring("password"))
 	})
 
+	It("keeps the bare NOT_FOUND of a health check for an unknown service", func() {
+		_, err := it(context.Background(), "req",
+			&grpc.UnaryServerInfo{FullMethod: "/grpc.health.v1.Health/Check"},
+			func(context.Context, any) (any, error) { return nil, status.Error(codes.NotFound, "unknown service") })
+
+		Expect(statusOf(err).Code()).To(Equal(codes.NotFound))
+		Expect(logs.String()).To(BeEmpty())
+	})
+
+	It("replaces a bare status of a consumer service under a grpc package with Internal", func() {
+		_, err := it(context.Background(), "req",
+			&grpc.UnaryServerInfo{FullMethod: "/grpc.gateway.foo.v1.Books/GetBook"},
+			func(context.Context, any) (any, error) { return nil, status.Error(codes.NotFound, "unknown book") })
+
+		Expect(statusOf(err).Code()).To(Equal(codes.Internal))
+		Expect(errorInfo(err).GetDomain()).To(Equal(string(domain)))
+	})
+
+	It("maps a finished transaction of a cancelled call to Canceled without a log", func() {
+		_, err := callIn(cancelled(), fmt.Errorf("commit: %w", sql.ErrTxDone))
+
+		Expect(statusOf(err).Code()).To(Equal(codes.Canceled))
+		Expect(logs.String()).To(BeEmpty())
+	})
+
 	It("logs the error it replaced", func() {
 		_, err := call(errors.New("pq: password auth failed for admin"))
 		Expect(err).To(HaveOccurred())
@@ -168,7 +210,7 @@ var _ = Describe("Unary", func() {
 	})
 
 	It("maps a cancelled context to Canceled", func() {
-		_, err := call(fmt.Errorf("query books: %w", context.Canceled))
+		_, err := callIn(cancelled(), fmt.Errorf("query books: %w", context.Canceled))
 
 		// grpc maps context errors itself, but only for errors reaching the transport.
 		Expect(statusOf(err).Code()).To(Equal(codes.Canceled))
@@ -176,10 +218,45 @@ var _ = Describe("Unary", func() {
 	})
 
 	It("maps an expired deadline to DeadlineExceeded", func() {
-		_, err := call(fmt.Errorf("query books: %w", context.DeadlineExceeded))
+		_, err := callIn(expired(), fmt.Errorf("query books: %w", context.DeadlineExceeded))
 
 		Expect(statusOf(err).Code()).To(Equal(codes.DeadlineExceeded))
 	})
+
+	It("maps a bare DeadlineExceeded status of an expired call to DeadlineExceeded", func() {
+		_, err := callIn(expired(), status.Error(codes.DeadlineExceeded, "context deadline exceeded"))
+
+		Expect(statusOf(err).Code()).To(Equal(codes.DeadlineExceeded))
+		Expect(logs.String()).To(BeEmpty())
+	})
+
+	DescribeTable("takes the code of an ended call from its context, not from the error of the handler",
+		func(ctx func() context.Context, returns error, expected codes.Code) {
+			_, err := callIn(ctx(), returns)
+
+			Expect(statusOf(err).Code()).To(Equal(expected))
+		},
+		Entry("a Canceled error of an expired call", expired, fmt.Errorf("query books: %w", context.Canceled),
+			codes.DeadlineExceeded),
+		Entry("a bare Canceled status of an expired call", expired, status.Error(codes.Canceled, "context canceled"),
+			codes.DeadlineExceeded),
+		Entry("a DeadlineExceeded error of a cancelled call", cancelled,
+			fmt.Errorf("query books: %w", context.DeadlineExceeded), codes.Canceled),
+	)
+
+	DescribeTable("replaces the end of an outbound call with Internal and logs it while the call goes on",
+		func(returns error) {
+			_, err := call(returns)
+
+			Expect(statusOf(err).Code()).To(Equal(codes.Internal))
+			Expect(logs.String()).To(ContainSubstring("unhandled error"))
+		},
+		Entry("a bare DeadlineExceeded status", status.Error(codes.DeadlineExceeded, "context deadline exceeded")),
+		Entry("a context.DeadlineExceeded", fmt.Errorf("query books: %w", context.DeadlineExceeded)),
+		Entry("a bare Canceled status", status.Error(codes.Canceled, "context canceled")),
+		Entry("a context.Canceled", fmt.Errorf("query books: %w", context.Canceled)),
+		Entry("a finished transaction", fmt.Errorf("commit: %w", sql.ErrTxDone)),
+	)
 
 	It("keeps the handler code over a context error it wraps", func() {
 		_, err := call(grpcerr.Aborted("BOOK_CHANGED", "the book changed underneath"))
@@ -208,5 +285,65 @@ var _ = Describe("Unary", func() {
 		_, err = errmap.Unary(a.Injector())
 
 		Expect(err).To(MatchError(ContainSubstring("errmap: failed to invoke the domain")))
+	})
+})
+
+type serverStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s serverStream) Context() context.Context { return s.ctx }
+
+var _ = Describe("Stream", func() {
+	var (
+		logs *bytes.Buffer
+		it   grpc.StreamServerInterceptor
+	)
+
+	BeforeEach(func() {
+		logs = &bytes.Buffer{}
+
+		a, err := app.New(context.Background(), []app.Module{
+			config.StaticModule(map[string]any{
+				"modules.logging.level":  "debug",
+				"modules.grpcerr.domain": string(domain),
+			}),
+			logging.Module(logging.WithWriter(logs), logging.WithoutDefault()),
+			grpcerr.Module(),
+		})
+		Expect(err).ToNot(HaveOccurred())
+
+		it, err = errmap.Stream(a.Injector())
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	callIn := func(ctx context.Context, returns error) error {
+		return it(nil, serverStream{ctx: ctx},
+			&grpc.StreamServerInfo{FullMethod: "/spec.v1.Books/WatchBooks"},
+			func(any, grpc.ServerStream) error { return returns })
+	}
+
+	call := func(returns error) error { return callIn(context.Background(), returns) }
+
+	It("returns nothing when the stream ended cleanly", func() {
+		Expect(call(nil)).To(Succeed())
+	})
+
+	It("replaces an error it cannot classify with Internal and logs it", func() {
+		err := call(errors.New("pq: password auth failed for admin"))
+
+		Expect(status.Code(err)).To(Equal(codes.Internal))
+		Expect(logs.String()).To(ContainSubstring("/spec.v1.Books/WatchBooks"))
+	})
+
+	It("maps the bare Canceled status of a closed stream to Canceled without a log", func() {
+		closed, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		err := callIn(closed, status.Error(codes.Canceled, "Stream has ended."))
+
+		Expect(status.Code(err)).To(Equal(codes.Canceled))
+		Expect(logs.String()).To(BeEmpty())
 	})
 })
