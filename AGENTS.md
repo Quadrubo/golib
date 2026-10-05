@@ -29,6 +29,8 @@ Commits are conventional. Every commit must pass `just check`.
 - Never write a comment above a package.
 - Never restate the code. A comment carries the reason a line exists, or the
   constraint that makes it look wrong, not what the line plainly does.
+- A comment sits at the line whose behaviour it explains. A comment on a type
+  or a struct never describes what a function does with it.
 - Keep a comment to one sentence. A doc comment on an exported identifier
   runs as long as the contract a consumer reads needs it to.
 - A doc comment opens with the name it documents, optionally after an article.
